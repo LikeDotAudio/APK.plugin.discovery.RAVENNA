@@ -1,0 +1,246 @@
+{
+  "ravenna_Console": {
+    "type": "OcaBin",
+    "id": "50.100.22.1",
+    "geometry": {
+      "anchor": "NSEW"
+    },
+    "behavior": {
+      "overflow_ns": "auto",
+      "overflow_ew": "auto",
+      "fluid_ew": true
+    },
+    "description": {
+      "En": "RAVENNA stream — ${model}",
+      "Fr": "RAVENNA stream — ${model}",
+      "De": "RAVENNA stream — ${model}",
+      "Es": "RAVENNA stream — ${model}"
+    },
+    "blocks": {
+      "Identity": {
+        "type": "OcaBlock",
+        "description": {
+          "En": "RAVENNA stream",
+          "Fr": "Identité",
+          "De": "Identität",
+          "Es": "Identidad",
+          "show_label": true
+        },
+        "layout_columns": 2,
+        "layout": {
+          "pady": 4,
+          "sticky": "nsew"
+        },
+        "fields": {
+          "stream": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Stream",
+              "Fr": "Stream",
+              "De": "Stream",
+              "Es": "Stream"
+            },
+            "value_default": "---",
+            "device_state": "stream",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "host": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Host",
+              "Fr": "Host",
+              "De": "Host",
+              "Es": "Host"
+            },
+            "value_default": "---",
+            "device_state": "host",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "format": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Format",
+              "Fr": "Format",
+              "De": "Format",
+              "Es": "Format"
+            },
+            "value_default": "---",
+            "device_state": "format",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "sample_rate": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Sample rate",
+              "Fr": "Sample rate",
+              "De": "Sample rate",
+              "Es": "Sample rate"
+            },
+            "value_default": "---",
+            "device_state": "sample_rate",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "channels": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Channels",
+              "Fr": "Channels",
+              "De": "Channels",
+              "Es": "Channels"
+            },
+            "value_default": "---",
+            "device_state": "channels",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "destination": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Destination",
+              "Fr": "Destination",
+              "De": "Destination",
+              "Es": "Destination"
+            },
+            "value_default": "---",
+            "device_state": "destination",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "rtp_port": {
+            "type": "_TextInput",
+            "label": {
+              "En": "RTP port",
+              "Fr": "RTP port",
+              "De": "RTP port",
+              "Es": "RTP port"
+            },
+            "value_default": "---",
+            "device_state": "rtp_port",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "ptime_ms": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Packet time (ms)",
+              "Fr": "Packet time (ms)",
+              "De": "Packet time (ms)",
+              "Es": "Packet time (ms)"
+            },
+            "value_default": "---",
+            "device_state": "ptime_ms",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "clock_domain": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Clock domain",
+              "Fr": "Clock domain",
+              "De": "Clock domain",
+              "Es": "Clock domain"
+            },
+            "value_default": "---",
+            "device_state": "clock_domain",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "direction": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Direction",
+              "Fr": "Direction",
+              "De": "Direction",
+              "Es": "Direction"
+            },
+            "value_default": "---",
+            "device_state": "direction",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "refclk": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Reference clock",
+              "Fr": "Reference clock",
+              "De": "Reference clock",
+              "Es": "Reference clock"
+            },
+            "value_default": "---",
+            "device_state": "refclk",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          },
+          "status": {
+            "type": "_SmartLight",
+            "label": {
+              "En": "Status",
+              "Fr": "Status",
+              "De": "Status",
+              "Es": "Status"
+            },
+            "value_default": "unknown",
+            "device_state": "status",
+            "notes": "A state, not a string: contracts/tokens/state.json decides the colour a _SmartLight draws. Every other field on this panel is a read-only _TextInput because a string is all it is.",
+            "layout": {
+              "width": "100%"
+            }
+          },
+          "last_seen": {
+            "type": "_TextInput",
+            "label": {
+              "En": "Last seen",
+              "Fr": "Last seen",
+              "De": "Last seen",
+              "Es": "Last seen"
+            },
+            "value_default": "---",
+            "device_state": "last_seen",
+            "read_only": true,
+            "layout": {
+              "width": "100%",
+              "font": 13
+            }
+          }
+        }
+      }
+    }
+  }
+}
