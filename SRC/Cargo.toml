@@ -2,11 +2,14 @@
 name = "apkaudio-ravenna"
 version = "0.1.0"
 edition.workspace = true
+workspace = "../../APK:plugins:Build/SRC"
 
 # Discovery + stream description only. No RTP receive/transmit, no stream
 # subscription. Dependencies stay minimal: RTSP DESCRIBE is a few lines of
 # plain-text over TCP, so no RTSP crate is warranted.
 [dependencies]
-apkaudio-contracts = { path = "../../contracts/rust" }
+# The container entry point in src/bin/apk-ravenna.rs (PLAN-3316.01).
+apk-plugin-runner = { path = "../../APK:plugins:Build/SRC/RUNNER" }
+apkaudio-contracts = { path = "../../APK:BareMetal/SRC/contracts/rust" }
 mdns-sd = "0.20"
 rumqttc = "0.24"
