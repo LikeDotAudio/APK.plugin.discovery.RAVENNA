@@ -41,7 +41,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
-use apkaudio_contracts::device_publish::{Register, Sighting};
+use apkaudio_contracts::device_publish::Sighting;
 use apkaudio_contracts::device_record::DeviceRecordStatus;
 use apkaudio_contracts::presence;
 use apkaudio_contracts::topics::sanitize_segment;
@@ -187,14 +187,13 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
     let mut fields: HashMap<String, String> = HashMap::new();
     let mut arrived = presence::Presence::new();
 
-    // The DeviceRecord side, and it is per HOST rather than per stream.
+    // The presence side (PLAN-3318.01), and it is per HOST rather than per stream.
     //
     // A RAVENNA session is a FLOW — the SDP above is a description of audio
     // moving, not of a box. The thing a controller should see in its device
     // list is the interface announcing those sessions, and one interface
     // announces many. The retained topics above already file streams under
     // their host for exactly this reason; the document follows that shape.
-    let mut discovered = Register::new();
     let mut hosts: HashMap<String, RavennaHost> = HashMap::new();
 
     while let Ok(event) = rx.recv() {
@@ -278,20 +277,8 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                     entry.streams.insert(stream_seg.clone());
                     let view = entry.clone();
                     let sighting = ravenna_sighting(&view);
-                    match discovered.observe(&sighting, now_secs as i64 * 1_000) {
-                        Ok(Some(publication)) => {
-                            let _ = mqtt_client.publish(
-                                publication.topic,
-                                rumqttc::QoS::AtLeastOnce,
-                                true,
-                                publication.payload.into_bytes(),
-                            );
-                        }
-                        Ok(None) => {}
-                        Err(e) => eprintln!(
-                            "   ⚠️  [RAVENNA] {host} not published as a DeviceRecord: {e}"
-                        ),
-                    }
+                    let detail = format!("APK.audio/System/Protocols/ravenna/Device/{host_seg}");
+                    apk_plugin_runner::presence::seen(&sighting, Some(&detail));
                 }
 
                 // Only when it is news — a session re-announcing is not one.
@@ -316,29 +303,15 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                 // that never passed the audio check is not ours to act on.
                 if let Some(host_seg) = published.remove(&stream_seg) {
                     println!("   👋 [RAVENNA] removed {session}");
-                    // The host leaves the registry only when its LAST session
-                    // goes. An interface that drops one of four streams is
-                    // still on the network, and retracting it here would take
-                    // a live device out of a controller's list because one
-                    // flow stopped.
+                    // The host goes inactive only when its LAST session goes. An
+                    // interface that drops one of four streams is still on the
+                    // network, and saying it gone here would take a live device
+                    // out of a controller's list because one flow stopped.
                     if let Some(entry) = hosts.get_mut(&host_seg) {
                         entry.streams.remove(&stream_seg);
                         if entry.streams.is_empty() {
                             if let Some(gone) = hosts.remove(&host_seg) {
-                                match discovered.retract(&ravenna_sighting(&gone)) {
-                                    Ok(Some(publication)) => {
-                                        let _ = mqtt_client.publish(
-                                            publication.topic,
-                                            rumqttc::QoS::AtLeastOnce,
-                                            true,
-                                            Vec::new(),
-                                        );
-                                    }
-                                    Ok(None) => {}
-                                    Err(e) => eprintln!(
-                                        "   ⚠️  [RAVENNA] DeviceRecord not retracted: {e}"
-                                    ),
-                                }
+                                apk_plugin_runner::presence::gone(&ravenna_sighting(&gone).device_id());
                             }
                         }
                     }
@@ -398,7 +371,7 @@ struct RavennaHost {
     streams: BTreeSet<String>,
 }
 
-/// The interface behind a set of sessions, as a DeviceRecord sighting.
+/// The interface behind a set of sessions, as a presence sighting.
 ///
 /// IDENTITY IS THE HOSTNAME, not the address: RAVENNA interfaces are commonly
 /// dual-homed for the ST 2022-7 red/blue pair, so keying on an address would
