@@ -33,6 +33,29 @@
 //! Discovery and description only. No RTP receive, no stream subscription, no
 //! connection management. Reading an SDP is exactly what any receiver does
 //! before deciding whether to subscribe, and it changes nothing on the device.
+//!
+//! # Nothing this agent publishes is kept
+//!
+//! Every stream topic goes out at **QoS 0 with the retain flag clear** — the
+//! one combination MQTT offers that the broker neither stores on the topic,
+//! nor queues for an absent subscriber, nor writes to its persistence file. A
+//! discovery announcement describes what is on the network *now*; retained, it
+//! goes on describing a stream that was switched off, and the agent that would
+//! correct it is not necessarily running.
+//!
+//! Unkept, an announcement retracts itself by not being restated — which is
+//! why [`RESTATE`] exists and is load-bearing rather than decorative. mDNS
+//! resolution is an *event*, and a RAVENNA session that resolves once may not
+//! resolve again for as long as its records are valid; publishing only on that
+//! event would put each stream on the bus once and leave it invisible to every
+//! subscriber that connected afterwards. So the full picture is restated on a
+//! timer from values already in hand — **no SDP is re-fetched to do it**, since
+//! that would turn a bus policy into RTSP traffic against every node on the
+//! bench every thirty seconds.
+//!
+//! Presence (`Discovery/ravenna/{host}`) is the exception and stays retained:
+//! it belongs to `apk_plugin_runner`, is shared with every plugin, and is what
+//! says a host has GONE rather than merely gone quiet.
 
 pub mod sdp;
 
@@ -72,6 +95,29 @@ const STREAM_KEYS: [&str; 13] = [
 ];
 
 const RTSP_TIMEOUT: Duration = Duration::from_secs(4);
+
+/// How often the whole known picture is restated.
+///
+/// Nothing is retained, so this is not a refresh of a stored value — it is the
+/// only reason a value is on the bus at all between mDNS events.
+const RESTATE: Duration = Duration::from_secs(30);
+
+/// Every publish this agent makes: at most once, never retained, never stored.
+///
+/// One helper rather than the flag pair repeated at each call site, so "unkept"
+/// is a property of the agent that a later edit cannot half-apply by forgetting
+/// an argument.
+fn say(mqtt_client: &rumqttc::Client, topic: impl Into<String>, payload: impl Into<Vec<u8>>) {
+    let _ = mqtt_client.publish(topic.into(), rumqttc::QoS::AtMostOnce, false, payload.into());
+}
+
+/// Say every known field again. The cache is the announcement, not a copy of
+/// one: `fields` holds exactly what the last mDNS resolution produced.
+fn restate(mqtt_client: &rumqttc::Client, fields: &HashMap<String, String>) {
+    for (topic, value) in fields {
+        say(mqtt_client, topic.clone(), value.clone().into_bytes());
+    }
+}
 
 
 /// Percent-encode a session name for use in an RTSP URL.
@@ -196,7 +242,31 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
     // their host for exactly this reason; the document follows that shape.
     let mut hosts: HashMap<String, RavennaHost> = HashMap::new();
 
-    while let Ok(event) = rx.recv() {
+    // The restate clock. mDNS hands this loop an event when a record is
+    // learned, not on a schedule, so without this a quiet bench would publish
+    // nothing between resolutions — and unkept, publishing nothing means being
+    // invisible rather than being unchanged.
+    let mut last_restate = std::time::Instant::now();
+
+    loop {
+        let event = match rx.recv_timeout(RESTATE) {
+            Ok(event) => Some(event),
+            // Idle: no mDNS traffic, which is the normal state of a settled
+            // bench and exactly when the restate matters most.
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
+            // Every browse thread has gone; there is nothing left to hear.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+
+        // Checked on the event path too, so a bench chatty enough to keep
+        // `recv_timeout` from ever expiring still restates on schedule.
+        if last_restate.elapsed() >= RESTATE {
+            last_restate = std::time::Instant::now();
+            restate(&mqtt_client, &fields);
+        }
+
+        let Some(event) = event else { continue };
+
         match event {
             ServiceEvent::ServiceResolved(info) => {
                 let addresses: Vec<String> =
@@ -250,20 +320,19 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                     arrived.since(&prefix, now_secs).to_string(),
                 ];
 
+                // EVERY field, EVERY resolution — and again on the restate
+                // timer. The dedupe that used to live here was free only while
+                // the broker held the last copy; unkept, a skipped write is a
+                // value no later subscriber can ever see. `wrote` now counts
+                // what is NEWS, which is a question about the log line only.
                 let mut wrote = 0usize;
                 for (key, value) in STREAM_KEYS.iter().zip(values) {
                     let topic = format!("{prefix}/{key}");
-                    if fields.get(&topic).is_some_and(|prev| *prev == value) {
-                        continue;
+                    if fields.get(&topic).is_none_or(|prev| *prev != value) {
+                        wrote += 1;
                     }
                     fields.insert(topic.clone(), value.clone());
-                    wrote += 1;
-                    let _ = mqtt_client.publish(
-                        topic,
-                        rumqttc::QoS::AtLeastOnce,
-                        true,
-                        value.into_bytes(),
-                    );
+                    say(&mqtt_client, topic, value.into_bytes());
                 }
                 // Fold this session into what is known about its host, and
                 // publish the host as one document. See `hosts` above.
@@ -318,16 +387,10 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                     let prefix = format!(
                         "APK.audio/System/Protocols/ravenna/Device/{host_seg}/{stream_seg}"
                     );
-                    for key in STREAM_KEYS {
-                        let _ = mqtt_client.publish(
-                            format!("{prefix}/{key}"),
-                            rumqttc::QoS::AtLeastOnce,
-                            true,
-                            Vec::new(),
-                        );
-                    }
-                    // Forget both, so a session that comes back is published in
-                    // full and starts a NEW spell rather than resuming the old.
+                    // No topics to clear: unkept, a stream leaves the bus by
+                    // dropping out of `fields` and so out of the next restate.
+                    // Forgetting both also means a session that comes back is
+                    // announced in full and starts a NEW spell.
                     fields.retain(|topic, _| !topic.starts_with(&prefix));
                     arrived.forget(&prefix);
                 }
@@ -340,6 +403,39 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The unkept policy, enforced rather than merely documented.
+    ///
+    /// Every publish in this agent goes through `say`, the single place the QoS
+    /// and retain flags are chosen. Most other agents in this tree publish
+    /// retained at QoS 1, so reaching for the client directly is the natural
+    /// thing for a later edit to do — and one such call would put a RAVENNA stream announcement
+    /// back into the broker's store, where it keeps answering after the thing
+    /// it describes has left the network. Checked at the source rather than
+    /// left to review.
+    ///
+    /// The needles are assembled at runtime: spelled out literally they would
+    /// appear in this test and match themselves.
+    #[test]
+    fn nothing_this_agent_publishes_is_kept() {
+        let source = include_str!("lib.rs");
+        let call = format!(".{}(", "publish");
+        assert_eq!(
+            source.matches(&call).count(),
+            1,
+            "every publish must go through say(); found a direct client call"
+        );
+
+        let unkept = format!("QoS::At{}Once, false", "Most");
+        assert!(source.contains(&unkept), "say() must publish QoS 0, not retained");
+
+        for kept in [format!("At{}Once", "Least"), format!("Exactly{}", "Once")] {
+            assert!(
+                !source.contains(&kept),
+                "{kept} would queue this agent's messages for absent subscribers"
+            );
+        }
+    }
 
     #[test]
     fn url_encoding_handles_real_session_names() {
