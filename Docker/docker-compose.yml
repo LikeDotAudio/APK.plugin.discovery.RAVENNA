@@ -1,9 +1,9 @@
 # APK:plugin:RAVENNA — RAVENNA / AES67 browse, one container.
-#     COMPOSE_PROFILES=discovery docker compose -f 'APK:PODS/POD:APK/APK:plugin:RAVENNA/Docker/docker-compose.yml' up -d --build
-# Normally started with the other plugins, by node role (see APK:plugins:Build):
-#     COMPOSE_PROFILES=discovery,l2 docker compose -f 'APK:PODS/POD:APK/APK:plugins:Build/Docker/docker-compose.yml' up -d
+#     COMPOSE_PROFILES=discovery docker compose -f 'APK:PODS/POD:APK_THICK/APK:plugin:RAVENNA/Docker/docker-compose.yml' up -d --build
+# Normally started with the other plugins, by node role (see discovery):
+#     COMPOSE_PROFILES=discovery,l2 docker compose -f 'APK:PODS/POD:APK_THICK/discovery/Docker/docker-compose.yml' up -d
 # The image, the capability floor, the broker variables and the healthcheck are
-# the base service in APK:plugins:Build/Docker/plugin-base.yml; this file says
+# the base service in discovery/Docker/plugin-base.yml; this file says
 # only what is THIS plugin's. No bind mounts, so no `bind:` sub-key to carry.
 
 # ONE PROJECT WITH THE REST (`apk-audio`), so the plugins clump with the node.
@@ -12,7 +12,7 @@ name: apk-audio
 services:
   ravenna:
     extends:
-      file: "../../APK:plugins:Build/Docker/plugin-base.yml"
+      file: "../../../discovery/Docker/plugin-base.yml"
       service: plugin-host
     container_name: Plugin-RAVENNA
     command: ["apk-ravenna"]

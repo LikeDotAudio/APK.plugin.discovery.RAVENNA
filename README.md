@@ -4,7 +4,7 @@ RAVENNA / AES67 browse, one container.
 
 | | |
 |---|---|
-| **Recipe** | `Docker/docker-compose.yml` — no Dockerfile: it runs a binary from the shared plugin image built by `APK:plugins:Build` |
+| **Recipe** | `Docker/docker-compose.yml` — no Dockerfile: it runs a binary from the shared plugin image built by `APK:discovery` |
 | **Source** | `SRC/` (this repository — https://github.com/LikeDotAudio/APK.plugin.discovery.RAVENNA.git) — bin `apk-ravenna`; built by the shared plugin image |
 | **Profile** | `discovery` |
 | **Talks to** | the broker only |
