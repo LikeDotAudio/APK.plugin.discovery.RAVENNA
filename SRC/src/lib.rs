@@ -339,10 +339,10 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                 {
                     let entry = hosts.entry(host_seg.clone()).or_insert_with(|| RavennaHost {
                         hostname: host.clone(),
-                        address: ip.clone(),
+                        addresses: BTreeSet::new(),
                         streams: BTreeSet::new(),
                     });
-                    entry.address = ip.clone();
+                    entry.addresses.insert(ip.clone());
                     entry.streams.insert(stream_seg.clone());
                     let view = entry.clone();
                     let sighting = ravenna_sighting(&view);
@@ -450,6 +450,18 @@ mod tests {
     }
 
     #[test]
+    fn a_multi_homed_host_says_the_same_notes_whichever_address_was_heard_last() {
+        let host = |order: &[&str]| RavennaHost {
+            hostname: "APK-Shop.local".into(),
+            addresses: order.iter().map(|a| a.to_string()).collect(),
+            streams: ["a".to_string(), "b".to_string()].into_iter().collect(),
+        };
+        let one = ravenna_sighting(&host(&["172.22.0.1", "44.44.44.168", "172.19.0.1"]));
+        let two = ravenna_sighting(&host(&["44.44.44.168", "172.19.0.1", "172.22.0.1"]));
+        assert_eq!(format!("{one:?}"), format!("{two:?}"));
+    }
+
+    #[test]
     fn sanitize_segment_neutralises_topic_metacharacters() {
         assert_eq!(sanitize_segment("Desk preMO"), "Desk_preMO");
         assert_eq!(sanitize_segment("a/b+c#d"), "a_b_c_d");
@@ -461,7 +473,12 @@ mod tests {
 #[derive(Clone)]
 struct RavennaHost {
     hostname: String,
-    address: String,
+    /// Every address its sessions were announced from. A set, not the last
+    /// one: a dual-homed (or, on the bench, docker-bridged) interface announces
+    /// on each, and "the last one heard" made the identity's `notes` flip
+    /// between them on every sweep — measured 2026-10-25, the NetBox sync
+    /// PATCHed `ravenna:APK-Shop.local` run after run for it.
+    addresses: BTreeSet<String>,
     /// Sanitised session names currently announced by this host. The host is
     /// retracted when this empties — see the removal arm.
     streams: BTreeSet<String>,
@@ -483,7 +500,7 @@ fn ravenna_sighting(host: &RavennaHost) -> Sighting {
         .notes(&format!(
             "{} session(s) at {}",
             host.streams.len(),
-            host.address
+            host.addresses.iter().cloned().collect::<Vec<_>>().join(", ")
         ))
         .status(DeviceRecordStatus::Identified)
 }
