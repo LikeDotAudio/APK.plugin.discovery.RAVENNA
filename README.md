@@ -2,6 +2,8 @@
 
 RAVENNA / AES67 browse, one container — and the SDP parser DANTE and SAP share.
 
+**Wiki:** [Documentation/README.md](Documentation/README.md) — principles, architecture and delivery, each checked against the code.
+
 | | |
 |---|---|
 | **Recipe** | `Docker/docker-compose.yml` — no Dockerfile: it runs a binary from the shared plugin image built by `PODS/POD.THICK/DISCOVERY.Engine/Docker/Dockerfile`, extending `plugin-host` in `DISCOVERY.Engine/Docker/plugin-base.yml` |
