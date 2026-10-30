@@ -4,7 +4,7 @@ Is `PLUGIN.RAVENNA` deployed? Written by `.apk.scripts/smoke.py` from the module
 
 ← [Wiki home](../README.md)
 
-**✅ PASS** — 2/2 checks, since 2026-10-30 12:50 EDT
+**✅ PASS** — 2/2 checks, since 2026-10-30 12:51 EDT
 
 | Check | Target | Result | Detail |
 |---|---|---|---|
@@ -13,4 +13,4 @@ Is `PLUGIN.RAVENNA` deployed? Written by `.apk.scripts/smoke.py` from the module
 
 Re-run: `python3 .apk.scripts/smoke.py PODS/POD.THICK/PLUGINS/PLUGIN.RAVENNA`
 
-<!-- smoke:sig 3a6f2147977d since 2026-10-30 12:50 EDT -->
+<!-- smoke:sig 83e4b97eb0f1 since 2026-10-30 12:51 EDT -->
