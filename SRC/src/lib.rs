@@ -249,6 +249,11 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
     let mut last_restate = std::time::Instant::now();
 
     loop {
+        // THE STALL WATCHDOG (LOOSE-plugins-playstation-printers-ptp). The loop
+        // turns at least every RESTATE even on a silent network, so a loop that
+        // wedges without returning is an exit the container restarts
+        // (APK_PLUGIN_STALL_SECS).
+        apk_plugin_runner::tick();
         let event = match rx.recv_timeout(RESTATE) {
             Ok(event) => Some(event),
             // Idle: no mDNS traffic, which is the normal state of a settled

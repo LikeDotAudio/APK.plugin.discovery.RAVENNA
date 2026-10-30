@@ -20,7 +20,8 @@ rules live in the root: [Refusal over fabrication](../../../../../../Documentati
 
 * **Identity = serial/MAC.** The sighting is keyed on the mDNS **hostname** (no serial is given),
   which survives a DHCP change and dual-homing but not a rename of the node.
-* **Stall watchdog.** `run_browse_agent` does not call `apk_plugin_runner::tick()`.
+* **Stall watchdog.** `run_browse_agent` calls `apk_plugin_runner::tick()` every turn (at least every
+  `RESTATE`, 30 s), so a wedged loop is an exit after `APK_PLUGIN_STALL_SECS`.
 * **Declared config is read config.** `service_type` and `domain` in
   [`SRC/config.ini`](../../SRC/config.ini) are read by nothing; the service types are the wire
   constant `SERVICE_TYPES`.
