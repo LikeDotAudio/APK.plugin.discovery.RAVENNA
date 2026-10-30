@@ -76,8 +76,11 @@ use apkaudio_contracts::topics::sanitize_segment;
 const SERVICE_TYPES: [&str; 2] = ["_ravenna._tcp.local.", "_rtsp._tcp.local."];
 
 /// Retained attribute keys per stream. Order here is the UI column order.
-const STREAM_KEYS: [&str; 13] = [
+const STREAM_KEYS: [&str; 14] = [
     "stream",
+    // The announcing host, as mDNS named it. The stream's own topic carries
+    // it only as a sanitized path segment; the console's Host field reads this.
+    "host",
     "format",
     "sample_rate",
     "channels",
@@ -311,6 +314,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
 
                 let values = [
                     session.clone(),
+                    host.clone(),
                     stream.format_summary(),
                     stream.sample_rate.to_string(),
                     stream.channels.to_string(),

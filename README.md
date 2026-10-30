@@ -84,7 +84,7 @@ is `MQTT_HOST` / `MQTT_PORT` from the runner, which also publishes the retained
 config at `APK.audio/System/Protocols/ravenna/config`, the `incoming/*` module
 topics and the self test (`src/self_test.rs`). `SRC/gui/manifest.json` declares
 the `ravenna` console family (tree `7_Device_Consoles`) and
-`SRC/gui/ravenna/ravenna.json` is its panel.
+`SRC/gui/ravenna/ravenna.json` is its panel. Each audio stream presents its own panel (PLAN-3413.01): `apk-ravenna.rs` names `panels = [ravenna]`, so apk-plugin-runner binds the template to every audio stream under `…/ravenna/Device/<host>/<stream>` and keeps it retained at `APK.audio/System/Gui/Panels/ravenna-<host>-<stream>`, emptied when `last_online` says offline or after `panels_expire_after_s` (120 s) of silence. The "Online since" field reads `online_since`.
 
 ## Build, run, test
 

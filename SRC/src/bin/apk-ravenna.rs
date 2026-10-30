@@ -3,4 +3,8 @@
 //! `apk-ravenna` — RAVENNA / AES67 browse as its own container (PLAN-3316.01). The crate is still a LIBRARY to
 //! DANTE and SAP for its `sdp` module; this binary is the one place it also runs.
 
-apk_plugin_runner::main!(token = "ravenna", lib = apkaudio_ravenna, run = [run_browse_agent]);
+//!
+//! `panels = [ravenna]`: every audio stream presents its own panel, retained at
+//! `APK.audio/System/Gui/Panels/ravenna-<host>-<stream>`.
+
+apk_plugin_runner::main!(token = "ravenna", lib = apkaudio_ravenna, run = [run_browse_agent], panels = [ravenna]);
