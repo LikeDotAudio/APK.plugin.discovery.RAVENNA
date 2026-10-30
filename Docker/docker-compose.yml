@@ -19,6 +19,13 @@ services:
       file: "../../../DISCOVERY.Engine/Docker/plugin-base.yml"
       service: plugin-host
     container_name: Plugin-RAVENNA
+    # WHAT THIS IS, said by the container itself (PLAN-3409.01): DockTor reads
+    # these with docker inspect, so its purpose and endpoint panes keep no list.
+    labels:
+      audio.apk.purpose: "RAVENNA / AES67 browse"
+      audio.apk.purpose.what: "apk-ravenna on host networking, browsing RAVENNA and AES67 streams and devices and publishing them."
+      audio.apk.purpose.why: "Without it AES67 and RAVENNA sources on the network are invisible to the bench."
+      audio.apk.endpoint.1: "copy tcp://127.0.0.1:554 RTSP streaming socket"
     command: ["apk-ravenna"]
     profiles: [discovery]
 
