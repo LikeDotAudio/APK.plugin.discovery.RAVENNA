@@ -6,7 +6,7 @@
 //! with SDP, fetched over RTSP. This agent follows that chain end to end:
 //!
 //! 1. **mDNS** — browse `_ravenna._tcp` and `_rtsp._tcp` for stream
-//!    announcements, plus `_http._tcp` for the node's config interface.
+//!    announcements (`SERVICE_TYPES`; `_http._tcp` is not browsed).
 //! 2. **RTSP DESCRIBE** — ask each announced session for its SDP record at
 //!    `rtsp://<ip>:554/by-name/<session>`.
 //! 3. **SDP** — parse out what an engineer needs: encoding, sample rate,
