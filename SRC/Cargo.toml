@@ -7,7 +7,7 @@ edition = "2024"
 # plain-text over TCP, so no RTSP crate is warranted.
 [dependencies]
 # The container entry point in src/bin/apk-ravenna.rs (PLAN-3316.01).
-apk-plugin-runner = { git = "https://github.com/LikeDotAudio/APK.plugin.SDK", tag = "sdk-v0.1" }
-apkaudio-contracts = { git = "https://github.com/LikeDotAudio/APK.plugin.SDK", tag = "sdk-v0.1" }
+apk-plugin-runner = { git = "https://github.com/LikeDotAudio/APK.plugin.SDK", tag = "sdk-v0.3" }
+apkaudio-contracts = { git = "https://github.com/LikeDotAudio/APK.plugin.SDK", tag = "sdk-v0.3" }
 mdns-sd = "0.20"
 rumqttc = "0.24"
