@@ -16,12 +16,14 @@ use crate::{rtsp, sdp, self_test};
 use apk_plugin_runner::session::Session;
 use apk_plugin_runner::unkept::{restate, say};
 use mdns_sd::{ServiceDaemon, ServiceEvent};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 use apkaudio_contracts::device_publish::Sighting;
-use apkaudio_contracts::device_record::DeviceRecordStatus;
+use apkaudio_contracts::device_record::{
+    DeviceRecordExtra, DeviceRecordExtraRavenna, DeviceRecordExtraRavennaStreamsItem, DeviceRecordStatus,
+};
 use apkaudio_contracts::presence;
 use apkaudio_contracts::topics::{self, sanitize_segment};
 
@@ -242,6 +244,17 @@ impl Browse {
         &self.fields
     }
 
+    /// Every known host as a sighting, for the restate timer (ROAD-3437 step
+    /// 3). The engine judges a host alive only while its `…/verified` proof
+    /// is younger than 3 × the verify period, and the runner restates the
+    /// proof only on a sighting — but mDNS re-resolves on its own schedule,
+    /// not ours. An unchanged host costs presence a map lookup.
+    pub(crate) fn sightings(&self) -> Vec<Effect> {
+        let mut hosts: Vec<(&String, &RavennaHost)> = self.hosts.iter().collect();
+        hosts.sort_by(|a, b| a.0.cmp(b.0));
+        hosts.into_iter().map(|(seg, host)| Effect::Seen(ravenna_sighting(host), device_topic(&[seg]))).collect()
+    }
+
     /// Fold one mDNS event in; the effects are what to say and sight.
     pub(crate) fn hear(&mut self, heard: Heard, describer: &dyn Describe, now_secs: u64) -> Vec<Effect> {
         let mut effects = Vec::new();
@@ -304,10 +317,27 @@ impl Browse {
                 let entry = self.hosts.entry(host_seg.clone()).or_insert_with(|| RavennaHost {
                     hostname: host.clone(),
                     addresses: BTreeSet::new(),
-                    streams: BTreeSet::new(),
+                    streams: BTreeMap::new(),
                 });
                 entry.addresses.insert(ip.clone());
-                entry.streams.insert(stream_seg.clone());
+                // The SAME values the STREAM_KEYS leaves above carry — the
+                // engine builds its stream rows from the host's record.
+                let text = |v: &str| (!v.trim().is_empty()).then(|| v.to_string());
+                entry.streams.insert(
+                    stream_seg.clone(),
+                    DeviceRecordExtraRavennaStreamsItem {
+                        session: session.clone(),
+                        format: text(&stream.format_summary()),
+                        sample_rate: Some(i64::from(stream.sample_rate)),
+                        channels: Some(i64::from(stream.channels)),
+                        destination: text(&stream.destination),
+                        rtp_port: Some(i64::from(stream.rtp_port)),
+                        ptime_ms: text(&stream.ptime_ms),
+                        clock_domain: text(&stream.clock_domain),
+                        refclk: text(&stream.refclk),
+                        direction: text(&stream.direction),
+                    },
+                );
                 effects.push(Effect::Seen(ravenna_sighting(entry), device_topic(&[&host_seg])));
 
                 // Only when it is news — a session re-announcing is not one.
@@ -339,6 +369,10 @@ impl Browse {
                         if let Some(gone) = self.hosts.remove(&host_seg) {
                             effects.push(Effect::Gone(ravenna_sighting(&gone).device_id()));
                         }
+                    } else {
+                        // Still here with fewer streams: re-sight it, so its
+                        // record drops the stream that left.
+                        effects.push(Effect::Seen(ravenna_sighting(entry), device_topic(&[&host_seg])));
                     }
                 }
                 let prefix = device_topic(&[&host_seg, &stream_seg]);
@@ -423,17 +457,22 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
 
         // Checked on the event path too, so a bench chatty enough to keep
         // `recv_timeout` from ever expiring still restates on schedule.
+        let mut effects = Vec::new();
         if last_restate.elapsed() >= settings.restate {
             last_restate = std::time::Instant::now();
             restate(&mqtt_client, browse.fields());
+            // And every host re-sighted, so its `…/verified` proof stays fresh.
+            effects.extend(browse.sightings());
         }
 
-        let Some(heard) = heard else { continue };
-        let now_secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        for effect in browse.hear(heard, &rtsp, now_secs) {
+        if let Some(heard) = heard {
+            let now_secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            effects.extend(browse.hear(heard, &rtsp, now_secs));
+        }
+        for effect in effects {
             match effect {
                 Effect::Say(topic, value) => say(&mqtt_client, topic, value.into_bytes()),
                 Effect::Seen(sighting, detail) => apk_plugin_runner::presence::seen(&sighting, Some(&detail)),
@@ -548,6 +587,54 @@ mod tests {
         assert!(b.fields().is_empty());
     }
 
+    fn streams_of(effect: &Effect) -> Vec<DeviceRecordExtraRavennaStreamsItem> {
+        match effect {
+            Effect::Seen(s, _) => s.extra.as_ref().and_then(|e| e.ravenna.clone()).expect("extra.ravenna").streams,
+            other => panic!("not a sighting: {other:?}"),
+        }
+    }
+
+    /// ROAD-3437 step 3: the host's record carries every stream it announces,
+    /// with the values its STREAM_KEYS leaves carry, sorted by session.
+    #[test]
+    fn a_host_with_two_streams_carries_both_in_its_extra() {
+        let mut b = Browse::new();
+        b.hear(resolved("Monitor", "44.44.44.166"), &canned(), 1);
+        let effects = b.hear(resolved("Desk preMO", "44.44.44.166"), &canned(), 1);
+        let streams = streams_of(effects.last().unwrap());
+        assert_eq!(streams.iter().map(|s| s.session.as_str()).collect::<Vec<_>>(), ["Desk preMO", "Monitor"]);
+        let said = says(&effects);
+        let prefix = "APK.audio/System/Protocols/ravenna/Device/desk_local/Desk_preMO";
+        let desk = &streams[0];
+        assert_eq!(desk.format.as_deref(), Some(said[&format!("{prefix}/format")].as_str()));
+        assert_eq!(desk.destination.as_deref(), Some("239.1.44.117"));
+        assert_eq!(desk.sample_rate.map(|n| n.to_string()), Some(said[&format!("{prefix}/sample_rate")].clone()));
+        assert_eq!(desk.channels.map(|n| n.to_string()), Some(said[&format!("{prefix}/channels")].clone()));
+        assert_eq!(desk.rtp_port.map(|n| n.to_string()), Some(said[&format!("{prefix}/rtp_port")].clone()));
+        for (key, value) in [("ptime_ms", &desk.ptime_ms), ("clock_domain", &desk.clock_domain), ("refclk", &desk.refclk), ("direction", &desk.direction)] {
+            let leaf = &said[&format!("{prefix}/{key}")];
+            assert_eq!(value.clone().unwrap_or_default(), *leaf, "{key}");
+            assert!(value.as_deref() != Some(""), "{key}: empty strings are None");
+        }
+        // The restate re-sights the host with the same record.
+        let again = b.sightings();
+        assert_eq!(again.len(), 1);
+        assert_eq!(streams_of(&again[0]), streams);
+    }
+
+    /// Removing one of two streams re-sights the host with the one left.
+    #[test]
+    fn removing_a_stream_re_sights_the_host_without_it() {
+        let mut b = Browse::new();
+        b.hear(resolved("Desk preMO", "44.44.44.166"), &canned(), 1);
+        b.hear(resolved("Monitor", "44.44.44.166"), &canned(), 1);
+        let effects = b.hear(Heard::Removed("Desk preMO._rtsp._tcp.local.".into()), &canned(), 2);
+        assert_eq!(effects.len(), 1, "{effects:?}");
+        let streams = streams_of(&effects[0]);
+        assert_eq!(streams.iter().map(|s| s.session.as_str()).collect::<Vec<_>>(), ["Monitor"]);
+        assert!(matches!(&effects[0], Effect::Seen(_, d) if d == "APK.audio/System/Protocols/ravenna/Device/desk_local"));
+    }
+
     #[test]
     fn ipv6_only_announcements_are_skipped() {
         let mut b = Browse::new();
@@ -582,7 +669,7 @@ mod tests {
         let host = |order: &[&str]| RavennaHost {
             hostname: "APK-Shop.local".into(),
             addresses: order.iter().map(|a| a.to_string()).collect(),
-            streams: ["a".to_string(), "b".to_string()].into_iter().collect(),
+            streams: BTreeMap::new(),
         };
         let one = ravenna_sighting(&host(&["172.22.0.1", "44.44.44.168", "172.19.0.1"]));
         let two = ravenna_sighting(&host(&["44.44.44.168", "172.19.0.1", "172.22.0.1"]));
@@ -607,9 +694,11 @@ struct RavennaHost {
     /// between them on every sweep — measured 2026-10-25, the NetBox sync
     /// PATCHed `ravenna:APK-Shop.local` run after run for it.
     addresses: BTreeSet<String>,
-    /// Sanitised session names currently announced by this host. The host is
-    /// retracted when this empties — see the removal arm.
-    streams: BTreeSet<String>,
+    /// Sanitised session name → the stream's details, for every session this
+    /// host currently announces. The host is retracted when this empties — see
+    /// the removal arm. The details are the record's `extra.ravenna.streams`
+    /// (ROAD-3437 step 3): the engine shows one row per stream from them.
+    streams: BTreeMap<String, DeviceRecordExtraRavennaStreamsItem>,
 }
 
 /// The interface behind a set of sessions, as a presence sighting.
@@ -621,7 +710,13 @@ struct RavennaHost {
 /// Interface", which `element.rs::KEYWORDS` maps to source+destination: a
 /// RAVENNA node both sends and receives, and the per-stream `direction` field
 /// above is where the per-flow answer already lives.
+///
+/// `extra.ravenna.streams` is every stream, sorted by session name, holding
+/// only values that change when the SDP does — never a per-sweep stamp, which
+/// would rewrite the record on every resolution.
 fn ravenna_sighting(host: &RavennaHost) -> Sighting {
+    let mut streams: Vec<DeviceRecordExtraRavennaStreamsItem> = host.streams.values().cloned().collect();
+    streams.sort_by(|a, b| a.session.cmp(&b.session));
     Sighting::new("ravenna", &host.hostname)
         .class("Audio Interface")
         .made_by("-", &host.hostname)
@@ -631,5 +726,6 @@ fn ravenna_sighting(host: &RavennaHost) -> Sighting {
             host.addresses.iter().cloned().collect::<Vec<_>>().join(", ")
         ))
         .status(DeviceRecordStatus::Identified)
+        .extra(DeviceRecordExtra { ravenna: Some(DeviceRecordExtraRavenna { streams }), ..Default::default() })
 }
 
