@@ -1,13 +1,35 @@
 [package]
 name = "apkaudio-ravenna"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
-# Discovery + stream description only. No RTP receive/transmit, no stream
-# subscription. Dependencies stay minimal: RTSP DESCRIBE is a few lines of
-# plain-text over TCP, so no RTSP crate is warranted.
+description = "RAVENNA / AES67 browse agent, and the shared SDP / SAP / PTP readers every APK.audio AoIP plugin uses"
+# TWO THINGS, SPLIT BY A FEATURE (2026-10-30 audit, RAVENNA #1 / AES67 #1).
+#
+# * The shared AoIP readers — `sdp`, `sap`, `ptp` — are always built and need
+#   nothing beyond std (`serde` derives behind the `serde` feature). PLUGIN.SAP,
+#   PLUGIN.DANTE, PLUGIN.AES67 and PLUGIN.PTP take this crate with
+#   `default-features = false`, by git `rev`, and get only these.
+# * The RAVENNA browse agent — feature `agent`, on by default — discovery and
+#   stream description only. No RTP receive/transmit, no stream subscription.
+#   RTSP DESCRIBE is a few lines of plain text over TCP, so no RTSP crate.
+#
+# VERSION: 0.2.0 is the first with `sap`/`ptp`/strict `sdp` and the features.
+# Bump MINOR when a reader's output changes for the same input (the corpus in
+# vectors/sdp/ is how a consumer notices).
+[features]
+default = ["agent"]
+agent = ["dep:apk-plugin-runner", "dep:apkaudio-contracts", "dep:mdns-sd", "dep:rumqttc"]
+serde = ["dep:serde"]
+
 [dependencies]
 # The container entry point in src/bin/apk-ravenna.rs (PLAN-3316.01).
-apk-plugin-runner = { git = "https://github.com/LikeDotAudio/APK.plugin.SDK", tag = "sdk-v0.5" }
-apkaudio-contracts = { git = "https://github.com/LikeDotAudio/APK.plugin.SDK", tag = "sdk-v0.5" }
-mdns-sd = "0.20"
-rumqttc = "0.24"
+apk-plugin-runner = { git = "https://github.com/LikeDotAudio/APK.plugin.SDK", tag = "sdk-v0.5", optional = true }
+apkaudio-contracts = { git = "https://github.com/LikeDotAudio/APK.plugin.SDK", tag = "sdk-v0.5", optional = true }
+mdns-sd = { version = "0.20", optional = true }
+rumqttc = { version = "0.24", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+
+[[bin]]
+name = "apk-ravenna"
+path = "src/bin/apk-ravenna.rs"
+required-features = ["agent"]

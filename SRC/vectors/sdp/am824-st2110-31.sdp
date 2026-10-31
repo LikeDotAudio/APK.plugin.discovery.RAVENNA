@@ -1,0 +1,8 @@
+v=0
+o=- 3 1 IN IP4 10.0.0.31
+s=AES3 pair
+c=IN IP4 239.69.3.1/32
+t=0 0
+m=audio 5004 RTP/AVP 97
+a=rtpmap:97 AM824/48000/2
+a=ptime:1

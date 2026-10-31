@@ -1,0 +1,18 @@
+RTSP/1.0 200 OK
+Content-Type: application/sdp
+Content-Length: 287
+CSeq: 1
+
+v=0
+o=- 5 0 IN IP4 44.44.44.166
+s=Desk preMO
+t=0 0
+a=clock-domain:PTPv2 0
+m=audio 5004 RTP/AVP 97
+c=IN IP4 239.1.44.117/1
+a=rtpmap:97 L24/48000/2
+a=recvonly
+a=framecount:48
+a=ptime:1
+a=ts-refclk:ptp=IEEE1588-2008:00-07-F5-FF-FE-00-54-72:0
+a=mediaclk:direct=0

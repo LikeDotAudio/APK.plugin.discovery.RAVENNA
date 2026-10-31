@@ -1,0 +1,13 @@
+v=0
+o=- 1 2 IN IP4 10.0.0.5
+s=Dante TX
+c=IN IP4 239.1.2.3/32
+t=0 0
+a=keywds:Dante
+m=audio 5004 RTP/AVP 97
+i=8 channels: 01, 02, 03, 04, 05, 06, 07, 08
+a=recvonly
+a=rtpmap:97 L24/48000/8
+a=ptime:1
+a=ts-refclk:ptp=IEEE1588-2008:00-1D-C1-FF-FE-12-34-56:0
+a=mediaclk:direct=0

@@ -1,0 +1,17 @@
+v=0
+o=- 1234 5 IN IP4 192.168.1.20
+s=APK stereo
+i=2 channels
+c=IN IP4 239.69.1.2/32
+t=0 0
+a=recvonly
+a=clock-domain:PTPv2 0
+m=audio 5004 RTP/AVP 97
+c=IN IP4 239.69.1.2/32
+a=source-filter: incl IN IP4 239.69.1.2 192.168.1.20
+a=rtpmap:97 L24/48000/2
+a=fmtp:97 channel-order=SMPTE2110.(ST)
+a=ptime:0.125
+a=maxptime:0.125
+a=ts-refclk:ptp=IEEE1588-2008:00-1D-C1-FF-FE-11-22-33:0
+a=mediaclk:direct=0

@@ -1,6 +1,6 @@
 # APK:plugin:RAVENNA
 
-RAVENNA / AES67 browse, one container — and the SDP parser DANTE and SAP share.
+RAVENNA / AES67 browse, one container — and the shared AoIP readers (SDP, SAP, PTP, the RTSP `/by-name/` path) that AES67, SAP, DANTE and PTP read with.
 
 **Wiki:** [Documentation/README.md](Documentation/README.md) — principles, architecture and delivery, each checked against the code.
 
@@ -14,9 +14,28 @@ RAVENNA / AES67 browse, one container — and the SDP parser DANTE and SAP share
 | **Talks to** | the broker; and each announced node's RTSP port, once per resolution, for one `DESCRIBE` |
 | **Bus token** | `ravenna` |
 
-Was a thread in `workers/discovery.rs`. The crate stays a library to
-`PLUGIN.DANTE` and `PLUGIN.SAP` for its `sdp` module (`src/sdp.rs`). Moved into
-its own container by PLAN-3316.01.
+Was a thread in `workers/discovery.rs`. Moved into its own container by
+PLAN-3316.01.
+
+## The shared AoIP readers
+
+The crate is also the **one home of the AoIP wire readers** every APK.audio
+plugin uses (2026-10-30 audit). They need nothing beyond `std`, and a consumer
+takes them alone with `default-features = false` (feature `agent`, the default,
+adds the browse agent, mDNS, MQTT and the runner):
+
+| Module | What | Read by |
+|---|---|---|
+| `src/sdp.rs` | RFC 4566: `parse` → `StreamInfo` (discovery, lenient) and `parse_stream` / `generate` → `StreamDesc` (subscription, strict; AES67 / ST 2110-30, conformance levels); `corpus()` — the fixture corpus in `SRC/vectors/sdp/` with expected parses | RAVENNA, SAP, DANTE (discovery); AES67 (strict, `features = ["serde"]`) |
+| `src/sap.rs` | RFC 2974 header: `parse` (refusals by name, IPv6 origins), `encode`, `msg_id_hash` | SAP (listen), AES67 (announce + browse) |
+| `src/ptp.rs` | IEEE 1588-2008 / 802.1AS messages: `parse` → `PtpMessage`, `encode_delay_req`, clock-identity spellings | PTP (monitor), AES67 (slave) |
+| `src/rtsp.rs` | the `/by-name/<session>` percent-encoding both ends of a DESCRIBE spell | RAVENNA (asks), AES67 (serves) |
+
+Consumers pin this repository by git `rev` (re-pinned by hand to the commit that
+carries the change; `.apk.scripts/plugin_standalone.py` explains the order) and
+run `sdp::corpus()` from their own tests, so a rev that reads a real
+announcement differently fails in the consumer's CI. Version: `0.2.0`; bump
+MINOR when a reader's output changes for the same input.
 
 ## What it does
 
@@ -67,8 +86,8 @@ Presence (`Discovery/ravenna/{id}`) and the `config.ini` publication stay
 retained: both belong to `apk-plugin-runner`, are shared with every plugin, and
 presence is what says a device has *gone* rather than merely gone quiet.
 
-`nothing_this_agent_publishes_is_kept` enforces this at the source — one publish
-call in the crate, and it is `say`.
+`nothing_this_agent_publishes_is_kept` enforces this at the source — no direct
+publish call in the agent; every one is the runner's `unkept::say` / `restate`.
 
 **No SDP is re-fetched to restate.** The cached values are republished; turning a bus policy into an RTSP DESCRIBE against every node on the bench every thirty seconds would be a worse bug than the one it fixes.
 
@@ -90,7 +109,8 @@ the `ravenna` console family (tree `7_Device_Consoles`) and
 
 ```sh
 # from PODS/POD.THICK/DISCOVERY.Engine/SRC
-cargo test -p apkaudio-ravenna        # 12 tests (2026-10-30)
+cargo test -p apkaudio-ravenna                        # 44 tests: readers, corpus, canned-announcement browse (2026-10-30)
+cargo test -p apkaudio-ravenna --no-default-features  # the readers alone, as consumers build them
 
 COMPOSE_PROFILES=discovery docker compose -f PODS/POD.THICK/PLUGINS/PLUGIN.RAVENNA/Docker/docker-compose.yml up -d --build
 ```
@@ -105,14 +125,14 @@ COMPOSE_PROFILES=discovery docker compose -f PODS/POD.THICK/PLUGINS/PLUGIN.RAVEN
 - **Read, never change.** A DESCRIBE is what any receiver does before it
   subscribes, and changes nothing on the device (`src/lib.rs`, "Scope").
 - **Nothing is kept; stopping is the retraction.** QoS 0, retain clear,
-  restated every 30 s (`restate_s`, `config.ini`) from the cache (`say`, `Settings::from_ini`,
+  restated every 30 s (`restate_s`, `config.ini`) from the cache (`unkept::say`, `Settings::from_ini`,
   `nothing_this_agent_publishes_is_kept`).
 - **A bus policy must not become network load.** The restate never re-fetches
-  an SDP (`restate()`).
+  an SDP (`Browse::fields` is what `unkept::restate` says).
 - **A device is gone when it is all gone.** One dropped stream does not take a
   live host out of the list (`ServiceRemoved` branch).
-- **One parser, shared.** DANTE and SAP use this crate's `sdp` rather than a
-  second copy (`PLUGIN.SAP/SRC/Cargo.toml`).
+- **One reader per wire format, shared.** SDP, SAP, PTP and the RTSP path are
+  read here once, for AES67, SAP, DANTE and PTP (`src/{sdp,sap,ptp,rtsp}.rs`).
 
 ---
 
