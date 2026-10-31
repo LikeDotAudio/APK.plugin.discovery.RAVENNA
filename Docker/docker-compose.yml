@@ -28,6 +28,10 @@ services:
     # WHAT THIS IS, said by the container itself (PLAN-3409.01): DockTor reads
     # these with docker inspect, so its purpose and endpoint panes keep no list.
     labels:
+      # HOW THE DISCOVERY ENGINE RAISES IT (ROAD-3437 step 3A): its launch table
+      # is these two labels, equal to config.ini [ravenna] raise/serves (check.sh raise-labels).
+      audio.apk.raise: "on-sighting"
+      audio.apk.serves: "ravenna"
       audio.apk.purpose: "RAVENNA / AES67 browse"
       audio.apk.purpose.what: "apk-ravenna on host networking, browsing RAVENNA and AES67 streams and devices and publishing them."
       audio.apk.purpose.why: "Without it AES67 and RAVENNA sources on the network are invisible to the bench."
