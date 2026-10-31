@@ -38,7 +38,7 @@ pub const MODULE: &str = "ravenna";
 /// depend on the working directory it was launched from — the plugin image
 /// holds binaries, not this source tree, and a check that passed at a terminal
 /// and failed in the container would be worse than no check.
-const CONFIG_INI: &str = include_str!("../config.ini");
+pub(crate) const CONFIG_INI: &str = include_str!("../config.ini");
 
 /// Everything this crate can prove about itself at `depth`.
 pub fn self_test(depth: Depth) -> Report {

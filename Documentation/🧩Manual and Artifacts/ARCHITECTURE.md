@@ -31,11 +31,11 @@ liveness at `APK.audio/Discovery/ravenna/+`.
 
 1. **Browse** `_ravenna._tcp` and `_rtsp._tcp` with mdns-sd (`SERVICE_TYPES`).
 2. **Describe.** On each resolution, `describe` sends `DESCRIBE rtsp://<ip>:<port>/by-name/<session>`
-   (4 s timeout) and returns the SDP body.
+   (`rtsp_timeout_s`, 4 s) and returns the SDP body.
 3. **Parse and file.** `sdp::parse`; a non-audio SDP is dropped. The stream is filed under its host,
    its 13 `STREAM_KEYS` published unretained and cached in `fields`; `presence::seen` keeps the
    host's retained presence.
-4. **Restate** the whole `fields` cache every 30 s.
+4. **Restate** the whole `fields` cache every `restate_s` (30 s). Both are `config.ini` keys read by `Settings::from_ini`.
 5. **Depart.** `ServiceRemoved` drops that session's topics from `fields`; when the host has no
    session left, `presence::gone`.
 

@@ -44,7 +44,7 @@
 //! correct it is not necessarily running.
 //!
 //! Unkept, an announcement retracts itself by not being restated — which is
-//! why [`RESTATE`] exists and is load-bearing rather than decorative. mDNS
+//! why the restate (`restate_s`, [`Settings`]) exists and is load-bearing rather than decorative. mDNS
 //! resolution is an *event*, and a RAVENNA session that resolves once may not
 //! resolve again for as long as its records are valid; publishing only on that
 //! event would put each stream on the bus once and leave it invisible to every
@@ -67,7 +67,7 @@ use std::time::Duration;
 use apkaudio_contracts::device_publish::Sighting;
 use apkaudio_contracts::device_record::DeviceRecordStatus;
 use apkaudio_contracts::presence;
-use apkaudio_contracts::topics::sanitize_segment;
+use apkaudio_contracts::topics::{self, sanitize_segment};
 
 /// Service types that lead to a RAVENNA node.
 ///
@@ -97,13 +97,52 @@ const STREAM_KEYS: [&str; 14] = [
     "online_since",
 ];
 
-const RTSP_TIMEOUT: Duration = Duration::from_secs(4);
-
-/// How often the whole known picture is restated.
+/// What `config.ini`'s `[ravenna]` section tunes, read once at start (RP-14:
+/// intervals and timeouts are config, not source).
 ///
-/// Nothing is retained, so this is not a refresh of a stored value — it is the
-/// only reason a value is on the bus at all between mDNS events.
-const RESTATE: Duration = Duration::from_secs(30);
+/// * `restate` (`restate_s`) — how often the whole known picture is restated.
+///   Nothing is retained, so this is not a refresh of a stored value — it is
+///   the only reason a value is on the bus at all between mDNS events.
+/// * `rtsp_timeout` (`rtsp_timeout_s`) — how long one RTSP DESCRIBE may take
+///   to connect, write or read before the session is skipped as "no SDP".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Settings {
+    pub restate: Duration,
+    pub rtsp_timeout: Duration,
+}
+
+impl Settings {
+    /// Both keys are required, in whole seconds above zero; a missing or
+    /// wrong one is NAMED rather than defaulted.
+    pub fn from_ini(text: &str) -> Result<Settings, String> {
+        let config = apk_plugin_runner::ini_to_json(text);
+        let section = config
+            .get(self_test::MODULE)
+            .ok_or_else(|| format!("config.ini has no [{}] section", self_test::MODULE))?;
+        let seconds = |key: &str| -> Result<Duration, String> {
+            let raw = section
+                .get(key)
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| format!("config.ini declares no {key}"))?;
+            let n: u64 = raw.parse().map_err(|_| format!("{key} = {raw} is not whole seconds"))?;
+            if n == 0 {
+                return Err(format!("{key} = 0 is not an interval"));
+            }
+            Ok(Duration::from_secs(n))
+        };
+        Ok(Settings { restate: seconds("restate_s")?, rtsp_timeout: seconds("rtsp_timeout_s")? })
+    }
+}
+
+/// The topic every RAVENNA host, and every stream under it, lives below:
+/// `…/ravenna/Device/{host}[/{stream}]`, from the contract's `protocols`
+/// builder rather than spelled here (RP-07). The segments are
+/// `sanitize_segment` output, so the contract's refusal is unreachable.
+fn device_topic(path: &[&str]) -> String {
+    let mut full = vec!["Device"];
+    full.extend_from_slice(path);
+    topics::protocols(self_test::MODULE, &full).expect("sanitized segments are always topic segments")
+}
 
 /// Every publish this agent makes: at most once, never retained, never stored.
 ///
@@ -145,12 +184,12 @@ fn url_encode(raw: &str) -> String {
 ///
 /// Returns `None` when the device does not answer, or answers without SDP —
 /// both of which mean "do not claim this is a RAVENNA stream".
-pub fn describe(ip: &str, port: u16, session: &str) -> Option<String> {
+pub fn describe(ip: &str, port: u16, session: &str, timeout: Duration) -> Option<String> {
     let url = format!("rtsp://{ip}:{port}/by-name/{}", url_encode(session));
     let addr = format!("{ip}:{port}").to_socket_addrs().ok()?.next()?;
-    let mut stream = TcpStream::connect_timeout(&addr, RTSP_TIMEOUT).ok()?;
-    stream.set_read_timeout(Some(RTSP_TIMEOUT)).ok()?;
-    stream.set_write_timeout(Some(RTSP_TIMEOUT)).ok()?;
+    let mut stream = TcpStream::connect_timeout(&addr, timeout).ok()?;
+    stream.set_read_timeout(Some(timeout)).ok()?;
+    stream.set_write_timeout(Some(timeout)).ok()?;
 
     let request = format!(
         "DESCRIBE {url} RTSP/1.0\r\nCSeq: 1\r\nAccept: application/sdp\r\n\
@@ -185,6 +224,14 @@ pub fn describe(ip: &str, port: u16, session: &str) -> Option<String> {
 
 /// Blocking browse loop — run on a dedicated thread.
 pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
+    let settings = match Settings::from_ini(self_test::CONFIG_INI) {
+        Ok(s) => s,
+        Err(why) => {
+            // The compiled-in file is wrong: a build defect, said once, loudly.
+            eprintln!("🛑 [RAVENNA] {why}");
+            return;
+        }
+    };
     let mut opts = rumqttc::MqttOptions::new("apkaudio-ravenna", mqtt_host, mqtt_port);
     opts.set_keep_alive(Duration::from_secs(30));
     if let Some((username, password)) = apkaudio_contracts::broker_auth::credentials() {
@@ -253,11 +300,11 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
 
     loop {
         // THE STALL WATCHDOG (LOOSE-plugins-playstation-printers-ptp). The loop
-        // turns at least every RESTATE even on a silent network, so a loop that
+        // turns at least every restate_s even on a silent network, so a loop that
         // wedges without returning is an exit the container restarts
         // (APK_PLUGIN_STALL_SECS).
         apk_plugin_runner::tick();
-        let event = match rx.recv_timeout(RESTATE) {
+        let event = match rx.recv_timeout(settings.restate) {
             Ok(event) => Some(event),
             // Idle: no mDNS traffic, which is the normal state of a settled
             // bench and exactly when the restate matters most.
@@ -268,7 +315,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
 
         // Checked on the event path too, so a bench chatty enough to keep
         // `recv_timeout` from ever expiring still restates on schedule.
-        if last_restate.elapsed() >= RESTATE {
+        if last_restate.elapsed() >= settings.restate {
             last_restate = std::time::Instant::now();
             restate(&mqtt_client, &fields);
         }
@@ -291,7 +338,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                     .unwrap_or_else(|| fullname.clone());
 
                 // The SDP is what proves this is audio. No SDP, no claim.
-                let Some(raw) = describe(&ip, info.get_port(), &session) else {
+                let Some(raw) = describe(&ip, info.get_port(), &session, settings.rtsp_timeout) else {
                     println!("   ⏭️  [RAVENNA] {session} @ {ip} did not return SDP — skipping");
                     continue;
                 };
@@ -308,9 +355,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
 
                 let host_seg = sanitize_segment(&host);
                 let stream_seg = sanitize_segment(&session);
-                let prefix = format!(
-                    "APK.audio/System/Protocols/ravenna/Device/{host_seg}/{stream_seg}"
-                );
+                let prefix = device_topic(&[&host_seg, &stream_seg]);
 
                 let values = [
                     session.clone(),
@@ -355,7 +400,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                     entry.streams.insert(stream_seg.clone());
                     let view = entry.clone();
                     let sighting = ravenna_sighting(&view);
-                    let detail = format!("APK.audio/System/Protocols/ravenna/Device/{host_seg}");
+                    let detail = device_topic(&[&host_seg]);
                     apk_plugin_runner::presence::seen(&sighting, Some(&detail));
                 }
 
@@ -393,9 +438,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                             }
                         }
                     }
-                    let prefix = format!(
-                        "APK.audio/System/Protocols/ravenna/Device/{host_seg}/{stream_seg}"
-                    );
+                    let prefix = device_topic(&[&host_seg, &stream_seg]);
                     // No topics to clear: unkept, a stream leaves the bus by
                     // dropping out of `fields` and so out of the next restate.
                     // Forgetting both also means a session that comes back is
@@ -444,6 +487,28 @@ mod tests {
                 "{kept} would queue this agent's messages for absent subscribers"
             );
         }
+    }
+
+    /// RP-07: the host and stream topics are the contract's `protocols` root.
+    #[test]
+    fn device_topics_are_the_contract_protocols_root() {
+        assert_eq!(device_topic(&["desk"]), "APK.audio/System/Protocols/ravenna/Device/desk");
+        assert_eq!(
+            device_topic(&["desk", "Desk_preMO"]),
+            topics::protocols("ravenna", &["Device", "desk", "Desk_preMO"]).unwrap()
+        );
+    }
+
+    /// RP-14: the restate interval and the RTSP timeout are config.
+    #[test]
+    fn intervals_come_from_config_ini() {
+        let s = Settings::from_ini(self_test::CONFIG_INI).expect("config.ini is a complete [ravenna]");
+        assert_eq!(s.restate, Duration::from_secs(30));
+        assert_eq!(s.rtsp_timeout, Duration::from_secs(4));
+        let ok = "[ravenna]\nrestate_s = 30\nrtsp_timeout_s = 4\n";
+        assert!(Settings::from_ini(&ok.replace("rtsp_timeout_s = 4\n", "")).unwrap_err().contains("rtsp_timeout_s"));
+        assert!(Settings::from_ini(&ok.replace("restate_s = 30", "restate_s = soon")).unwrap_err().contains("restate_s"));
+        assert!(Settings::from_ini(&ok.replace("restate_s = 30", "restate_s = 0")).is_err());
     }
 
     #[test]

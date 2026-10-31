@@ -23,7 +23,7 @@ its own container by PLAN-3316.01.
 `run_browse_agent` (`src/lib.rs`) follows the RAVENNA chain end to end:
 
 1. **mDNS** — browse `_ravenna._tcp` and `_rtsp._tcp` (`SERVICE_TYPES`).
-2. **RTSP DESCRIBE** — `rtsp://<ip>:<port>/by-name/<session>`, 4 s timeout.
+2. **RTSP DESCRIBE** — `rtsp://<ip>:<port>/by-name/<session>`, 4 s timeout (`rtsp_timeout_s`, `config.ini`).
 3. **SDP** — encoding, sample rate, channels, multicast destination, RTP port,
    packet time, PTP clock domain, refclk, direction (`src/sdp.rs`).
 
@@ -105,7 +105,7 @@ COMPOSE_PROFILES=discovery docker compose -f PODS/POD.THICK/PLUGINS/PLUGIN.RAVEN
 - **Read, never change.** A DESCRIBE is what any receiver does before it
   subscribes, and changes nothing on the device (`src/lib.rs`, "Scope").
 - **Nothing is kept; stopping is the retraction.** QoS 0, retain clear,
-  restated every 30 s from the cache (`say`, `RESTATE`,
+  restated every 30 s (`restate_s`, `config.ini`) from the cache (`say`, `Settings::from_ini`,
   `nothing_this_agent_publishes_is_kept`).
 - **A bus policy must not become network load.** The restate never re-fetches
   an SDP (`restate()`).
