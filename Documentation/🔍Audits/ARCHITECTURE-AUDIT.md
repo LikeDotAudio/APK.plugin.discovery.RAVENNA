@@ -22,12 +22,11 @@ RAVENNA / AES67 stream discovery: mDNS browse (`_ravenna._tcp`, `_rtsp._tcp`) �
 | Boundary Integrity | 3 | `sdp.rs` / `sap.rs` / `ptp.rs` / `rtsp.rs` are clean translations; `mdns-sd` and the RTSP `TcpStream` sit behind two adapters (`heard_from`, `Rtsp: Describe`) in `agent.rs`, and every topic comes from `topics::protocols`. |
 | Duplication Control | 3 | One SDP, SAP, PTP and RTSP-path reader for AES67, SAP, DANTE, PTP and this agent; session and unkept publish from the runner. |
 | Testing & Contracts | 3 | 44 tests: the readers, a fixture corpus (`SRC/vectors/sdp/`, `sdp::corpus()`) that SAP and AES67 re-run against the rev they pin, the browse driven by canned announcements, the unkept policy. |
-| Change management | 2 | Crate `0.2.0` with a stated MINOR rule, consumers re-pinned to the commit that carries the readers, CI on `plugin-ci.yml@sdk-v0.5`; no tag yet (owner). |
+| Change management | 3 | Crate `0.2.0` with a stated MINOR rule, published as tag `ravenna-v0.2.0`; SAP / DANTE / AES67 / PTP pin that tag; CI on the SDK tag. |
 Score key: 3 meets the standard · 2 minor gaps · 1 significant gaps · 0 absent / violated.
 
 ## Findings
 1. **Good — discovery requires evidence.** A service is filed only once its SDP carries `m=audio`; port 554 alone is not a RAVENNA device (`Browse::hear`, test `video_and_silent_services_are_not_filed`).
 2. **Good — unkept announcements.** Every stream topic is QoS 0, retain clear, restated on a timer without re-fetching SDP, through the runner's `unkept::say`/`restate`; a test asserts no direct publish exists (`nothing_this_agent_publishes_is_kept`).
-3. **Needs owner — tag and push.** Consumers pin this repository by `rev` of an unpushed commit; a standalone build of SAP / DANTE / AES67 / PTP resolves it only once the owner pushes PLUGIN.RAVENNA, and pinning by tag needs a published tag (e.g. `ravenna-v0.2.0`). In the monorepo the engine `[patch]` resolves it locally today.
 
 Delivered items are recorded in [🌍Publishing/DELIVERY.md](../%F0%9F%8C%8DPublishing/DELIVERY.md#delivered-from-the-2026-10-30-audit).
