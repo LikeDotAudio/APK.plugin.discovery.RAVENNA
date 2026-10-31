@@ -25,7 +25,7 @@ root.
 
 ## Not automated
 
-* CI is the SDK's reusable `plugin-ci.yml@sdk-v0.5` on every push (pinned to the same tag as the
+* CI is the SDK's reusable `plugin-ci.yml@sdk-v0.7` on every push (pinned to the same tag as the
   dependencies); the monorepo's own CI builds nothing here, on purpose.
 * No release artefact: the image is built locally on each node (`up -d --build`). The crate is
   versioned (`0.2.0`); tags are published by the owner.
@@ -51,3 +51,4 @@ DISCOVERY.Engine workspace, plus each consumer's own `cargo test -p`.
 - **Identity is the hostname** (finding 3) — written down as the stated fallback for this protocol (mDNS/SDP carry no serial or MAC; never an IP), PRINCIPLES.md.
 - **Kept by design: compose `extends` plugin-base.yml and the engine `[patch]` / `members/` link** — the house plugin pattern; reason in PRINCIPLES.md.
 - **Tagged and consumed by tag** (IMPROVEMENTS #1 of the first pass) — the coordinator pushed this repository and published `ravenna-v0.2.0` (→ `2695d40`); SAP, DANTE, AES67 and PTP now pin `tag = "ravenna-v0.2.0"`. Verified: a standalone `git archive HEAD` of this repo and of each consumer runs `cargo test` green against the GitHub tags (RAVENNA 44, SAP 13, DANTE 250, AES67 31, PTP 85).
+- **SDK repinned to `sdk-v0.7`** (1aa911f) — `SRC/Cargo.toml` takes the runner and contracts, and `.github/workflows/ci.yml` calls `plugin-ci.yml`, at the same tag; it ships `docker/plugin-volumes.yml`, so plugin CI's standalone compose check resolves. Verified 2026-10-31: `git archive HEAD` alone, `cargo test` against GitHub — 44 pass; plugin-ci's compose step reproduced (`plugin-base.yml` + `plugin-volumes.yml` from `sdk-v0.7`, `docker compose config -q`) passes.
