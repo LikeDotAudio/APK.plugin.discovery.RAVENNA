@@ -6,5 +6,9 @@
 //!
 //! `panels = [ravenna]`: every audio stream presents its own panel, retained at
 //! `APK.audio/System/Gui/Panels/ravenna-<host>-<stream>`.
+//!
+//! `manifest = "agent.toml"` (ROAD-3478): the manifest is compiled in, and the
+//! runner serves `GET /status` / `GET /telemetry` on 127.0.0.1:8213 — `running`
+//! until a stream resolves on mDNS or a device answers a DESCRIBE, `serving` after.
 
-apk_plugin_runner::main!(token = "ravenna", lib = apkaudio_ravenna, run = [run_browse_agent], panels = [ravenna]);
+apk_plugin_runner::main!(token = "ravenna", lib = apkaudio_ravenna, run = [run_browse_agent], panels = [ravenna], manifest = "agent.toml");

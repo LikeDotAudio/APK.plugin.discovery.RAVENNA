@@ -138,6 +138,12 @@ pub fn describe(ip: &str, port: u16, session: &str, timeout: Duration) -> Option
     }
 
     let text = String::from_utf8_lossy(&buf).to_string();
+    // TRAFFIC, counted for the loopback telemetry (ROAD-3478): the device
+    // ANSWERED the DESCRIBE — any RTSP reply, 200 or not. A refused connect or
+    // a silent socket counts nothing.
+    if text.starts_with("RTSP/") {
+        apk_plugin_runner::loopback::packet_received();
+    }
     if !text.starts_with("RTSP/1.0 200") {
         return None;
     }
@@ -395,6 +401,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
         Err(why) => {
             // The compiled-in file is wrong: a build defect, said once, loudly.
             eprintln!("🛑 [RAVENNA] {why}");
+            apk_plugin_runner::loopback::fatal(why);
             return;
         }
     };
@@ -406,6 +413,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("❌ [RAVENNA] could not start mDNS daemon: {e}");
+            apk_plugin_runner::loopback::fatal(format!("could not start mDNS daemon: {e}"));
             return;
         }
     };
@@ -418,6 +426,12 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                 std::thread::spawn(move || {
                     while let Ok(ev) = receiver.recv() {
                         let Some(heard) = heard_from(ev) else { continue };
+                        // TRAFFIC (ROAD-3478): a service RESOLVED from mDNS
+                        // responses. A removal is not counted — mdns-sd raises
+                        // it for a goodbye and a lapsed TTL alike.
+                        if matches!(heard, Heard::Resolved(_)) {
+                            apk_plugin_runner::loopback::packet_received();
+                        }
                         if tx.send(heard).is_err() {
                             break;
                         }
@@ -480,11 +494,28 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
             }
         }
     }
+    // Every browse thread has gone: nothing is left to hear.
+    eprintln!("🛑 [RAVENNA] every mDNS browse ended");
+    apk_plugin_runner::loopback::fatal("every mDNS browse ended");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The manifest the binary compiles in parses, declares the loopback port
+    /// and lists the keys of config.ini's [ravenna] it reads (ROAD-3478).
+    /// ONE KEY IS UNREAD, honestly: `enabled` — neither this crate nor the
+    /// runner reads it.
+    #[test]
+    fn the_compiled_in_manifest_parses_and_reads_every_config_key() {
+        let manifest = apkaudio_contracts::embedded_manifest!().expect("agent.toml parses");
+        assert_eq!(manifest.name, "ravenna");
+        assert_eq!(manifest.telemetry_port, 8213);
+        let config = apk_plugin_runner::ini_to_json(include_str!("../config.ini"));
+        let keys: Vec<&str> = config["ravenna"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(manifest.unread_config_keys(keys), Some(1), "[ravenna] keys nothing reads: only `enabled`");
+    }
 
     /// The unkept policy, enforced rather than merely documented.
     ///

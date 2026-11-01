@@ -1,0 +1,31 @@
+# Part of the APK.audio project — http://APK.audio — made by Anthony Kuzub
+# MIT Licence. Free, for everyone, for ever. Full text in LICENSE at the root.
+#
+# WHAT THIS AGENT IS, compiled into apk-ravenna by `manifest = "agent.toml"` in
+# src/bin/apk-ravenna.rs (apkaudio_contracts::embedded_manifest!, ROAD-3472 /
+# ROAD-3478). Not read at run time: the image carries the binary, not this file.
+
+[agent]
+name = "ravenna"
+kind = "protocol"
+title = "RAVENNA / AES67 stream discovery"
+status = "discovery-only"
+summary = "Browses mDNS for _ravenna._tcp and _rtsp._tcp, fetches each stream's SDP with RTSP DESCRIBE and publishes the stream descriptions. No RTP is received, nothing is subscribed or connected."
+
+[telemetry]
+# GET /status and GET /telemetry on 127.0.0.1:8213 (host networking, so this
+# is the node's loopback and NODE.BareMetal's supervisor reads it). `running`
+# until the first packet, `serving` after. A packet is a ServiceResolved event
+# out of mdns-sd (agent.rs::run_browse_agent's browse thread; a removal is not
+# counted — mdns-sd raises it for a lapsed TTL too) or an ANSWERED RTSP
+# DESCRIBE, any RTSP reply (agent.rs::describe). APK_TELEMETRY_PORT moves it;
+# 0 turns it off.
+port = 8213
+
+[config]
+# The keys of config.ini's [ravenna] that code reads: restate_s,
+# rtsp_timeout_s by Settings::from_ini (src/agent.rs); raise by
+# apk-plugin-runner (module_raise); presence_* by presence::settings_from_config;
+# panels_expire_after_s by panels. `enabled` is read by nothing and is left
+# out on purpose, so `unread_config_keys` says 1.
+reads = ["raise", "restate_s", "rtsp_timeout_s", "presence_protocols", "presence_inactive_after_s", "panels_expire_after_s"]
