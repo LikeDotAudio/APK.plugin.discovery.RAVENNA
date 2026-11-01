@@ -1,6 +1,6 @@
 [package]
 name = "apkaudio-ravenna"
-version = "0.2.0"
+version = "2.0.0"
 edition = "2024"
 description = "RAVENNA / AES67 browse agent, and the shared SDP / SAP / PTP readers every APK.audio AoIP plugin uses"
 # TWO THINGS, SPLIT BY A FEATURE (2026-10-30 audit, RAVENNA #1 / AES67 #1).
