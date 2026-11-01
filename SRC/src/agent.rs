@@ -505,8 +505,7 @@ mod tests {
 
     /// The manifest the binary compiles in parses, declares the loopback port
     /// and lists the keys of config.ini's [ravenna] it reads (ROAD-3478).
-    /// ONE KEY IS UNREAD, honestly: `enabled` — neither this crate nor the
-    /// runner reads it.
+    /// None is unread: `enabled` is read by apk-plugin-runner (module_enabled).
     #[test]
     fn the_compiled_in_manifest_parses_and_reads_every_config_key() {
         let manifest = apkaudio_contracts::embedded_manifest!().expect("agent.toml parses");
@@ -514,7 +513,7 @@ mod tests {
         assert_eq!(manifest.telemetry_port, 8213);
         let config = apk_plugin_runner::ini_to_json(include_str!("../config.ini"));
         let keys: Vec<&str> = config["ravenna"].as_object().unwrap().keys().map(String::as_str).collect();
-        assert_eq!(manifest.unread_config_keys(keys), Some(1), "[ravenna] keys nothing reads: only `enabled`");
+        assert_eq!(manifest.unread_config_keys(keys), Some(0), "every [ravenna] key is read — `enabled` by the runner (module_enabled)");
     }
 
     /// The unkept policy, enforced rather than merely documented.
