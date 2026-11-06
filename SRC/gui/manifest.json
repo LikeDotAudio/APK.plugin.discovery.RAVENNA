@@ -6,6 +6,12 @@
   },
   "ravenna": {
     "tab": "2_RAVENNA",
-    "tree": "7_Device_Consoles"
+    "tree": "7_Device_Consoles",
+    "bim": {
+      "part": "protocol/ravenna",
+      "models": {
+        "ravennastreamsource": "ward-beck-systems/ravenna-stream-source"
+      }
+    }
   }
 }
