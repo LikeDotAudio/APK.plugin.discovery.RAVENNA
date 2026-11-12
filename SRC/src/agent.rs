@@ -400,7 +400,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
         Ok(s) => s,
         Err(why) => {
             // The compiled-in file is wrong: a build defect, said once, loudly.
-            eprintln!("🛑 [RAVENNA] {why}");
+            apk_plugin_runner::elog!(error, "🛑 [RAVENNA] {why}");
             apk_plugin_runner::loopback::fatal(why);
             return;
         }
@@ -412,7 +412,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
     let mdns = match ServiceDaemon::new() {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("❌ [RAVENNA] could not start mDNS daemon: {e}");
+            apk_plugin_runner::elog!(error, "❌ [RAVENNA] could not start mDNS daemon: {e}");
             apk_plugin_runner::loopback::fatal(format!("could not start mDNS daemon: {e}"));
             return;
         }
@@ -438,7 +438,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
                     }
                 });
             }
-            Err(e) => eprintln!("   ⚠️  [RAVENNA] cannot browse {stype}: {e}"),
+            Err(e) => apk_plugin_runner::elog!(warn, "   ⚠️  [RAVENNA] cannot browse {stype}: {e}"),
         }
     }
     drop(tx);
@@ -495,7 +495,7 @@ pub fn run_browse_agent(mqtt_host: &str, mqtt_port: u16) {
         }
     }
     // Every browse thread has gone: nothing is left to hear.
-    eprintln!("🛑 [RAVENNA] every mDNS browse ended");
+    apk_plugin_runner::elog!(error, "🛑 [RAVENNA] every mDNS browse ended");
     apk_plugin_runner::loopback::fatal("every mDNS browse ended");
 }
 
